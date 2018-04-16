@@ -6,7 +6,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Rafael Fenerick"
 #property link      "rafaelfenerick.mql5@gmail.com"
-#property version   "1.00"
+#property version   "1.10"
 
 /*
 EA com horário de início, término e fechamento.
@@ -14,9 +14,11 @@ Estratégia baseada no cruzamento de duas médias.
 */
 
 // Inclusão de bibliotecas utilizadas
-#include <Trade/Trade.mqh>
+//#include <Trade/Trade.mqh> As ordens serão enviadas por meio da função OrderSend
 #include <Trade/SymbolInfo.mqh>
 
+input ENUM_TRADE_REQUEST_ACTIONS TipoAction=TRADE_ACTION_DEAL; // Tipo de Ordem Enviada
+input double   Distancia      = 2.0;      // Distância da Ordem (ordens pendentes)
 input int      PeriodoLongo   = 20;       // Período Média Longa
 input int      PeriodoCurto   = 10;       // Período Média Curta
 input double   SL             = 3.0;      // Stop Loss
@@ -28,8 +30,14 @@ input string   fechamento     = "17:30";  // Horário de Fechamento (posições)
 
 int handlemedialonga, handlemediacurta; // Manipuladores dos dois indicadores de média móvel
 
-CTrade negocio; // Classe responsável pela execução de negócios
+//CTrade negocio; // Classe responsável pela execução de negócios
 CSymbolInfo simbolo; // Classe responsãvel pelos dados do ativo
+//--- Estruturas de negociação
+MqlTradeRequest request;
+MqlTradeResult result;
+MqlTradeCheckResult check_result;
+
+int magic = 1234; // Número mágico das ordens
 
 // Estruturas de tempo para manipulação de horários
 MqlDateTime horario_inicio, horario_termino, horario_fechamento, horario_atual;
@@ -86,6 +94,13 @@ int OnInit()
       return INIT_FAILED;
    }
    
+   // Checar se ordem é pendente ou a mercado e determinar trade action
+   if(TipoAction!=TRADE_ACTION_DEAL && TipoAction!= TRADE_ACTION_PENDING)
+   {
+      printf("Tipo de ordem não permitido");
+      return INIT_FAILED;
+   }
+   
    return(INIT_SUCCEEDED);
   }
 //+------------------------------------------------------------------+
@@ -111,7 +126,7 @@ void OnTick()
    if(HorarioEntrada())
    {
       // EA não está posicionado
-      if(SemPosicao())
+      if(SemPosicao() && SemOrdem())
       {
          // Verificar estratégia e determinar compra ou venda
          int resultado_cruzamento = Cruzamento();
@@ -129,7 +144,7 @@ void OnTick()
    if(HorarioFechamento())
    {
       // EA está posicionado, fechar posição
-      if(!SemPosicao())
+      if(!SemPosicao() || !SemOrdem())
          Fechar();
    }
    
@@ -200,38 +215,185 @@ bool HorarioFechamento()
 //+------------------------------------------------------------------+
 void Compra()
 {
-   double price = simbolo.Ask(); // Determinação do preço da ordem a mercado
+   double price;
+   if(TipoAction==TRADE_ACTION_DEAL) // Determinação do preço da ordem a mercado
+      price = simbolo.Ask(); 
+   else
+      price = simbolo.Bid() - Distancia;
    double stoploss = simbolo.NormalizePrice(price - SL); // Cálculo normalizado do stoploss
    double takeprofit = simbolo.NormalizePrice(price + TP); // Cálculo normalizado do takeprofit
-   negocio.Buy(Volume, NULL, price, stoploss, takeprofit, "Compra CruzamentoMediaEA"); // Envio da ordem de compra pela classe responsável
+   //negocio.Buy(Volume, NULL, price, stoploss, takeprofit, "Compra CruzamentoMediaEA"); // Envio da ordem de compra pela classe responsável
+   
+   // Limpar informações das estruturas
+   ZeroMemory(request);
+   ZeroMemory(result);
+   ZeroMemory(check_result);
+   
+   //--- Preenchimento da requisição
+   request.action       =TipoAction;
+   request.magic        =magic;
+   request.symbol       =_Symbol;
+   request.volume       =Volume;
+   request.price        =price; 
+   request.sl           =stoploss;
+   request.tp           =takeprofit;
+   if(TipoAction==TRADE_ACTION_DEAL)
+      request.type      =ORDER_TYPE_BUY;
+   else
+      request.type      =ORDER_TYPE_BUY_LIMIT;
+   request.type_filling =ORDER_FILLING_RETURN; 
+   request.type_time    =ORDER_TIME_DAY;
+   request.comment      ="Compra CruzamentoMediaEA";
+   
+   //--- Checagem e envio de ordens
+   ResetLastError();
+   if(!OrderCheck(request, check_result))
+   {
+      PrintFormat("Erro em OrderCheck: %d", GetLastError());
+      PrintFormat("Código de Retorno: %d", check_result.retcode);
+      return;
+   }
+   
+   if(!OrderSend(request, result))
+   {
+      PrintFormat("Erro em OrderSend: %d", GetLastError());
+      PrintFormat("Código de Retorno: %d", result.retcode);
+   }
 }
 //+------------------------------------------------------------------+
 //| Realizar venda com parâmetros especificados por input            |
 //+------------------------------------------------------------------+
 void Venda()
 {
-   double price = simbolo.Bid(); // Determinação do preço da ordem a mercado
+   double price;
+   if(TipoAction==TRADE_ACTION_DEAL) // Determinação do preço da ordem a mercado
+      price = simbolo.Bid(); 
+   else
+      price = simbolo.Ask() + Distancia;
    double stoploss = simbolo.NormalizePrice(price + SL); // Cálculo normalizado do stoploss
    double takeprofit = simbolo.NormalizePrice(price - TP); // Cálculo normalizado do takeprofit
-   negocio.Sell(Volume, NULL, price, stoploss, takeprofit, "Venda CruzamentoMediaEA"); // Envio da ordem de compra pela classe responsável
+   //negocio.Sell(Volume, NULL, price, stoploss, takeprofit, "Venda CruzamentoMediaEA"); // Envio da ordem de compra pela classe responsável
+   
+   // Limpar informações das estruturas
+   ZeroMemory(request);
+   ZeroMemory(result);
+   ZeroMemory(check_result);
+   
+   //--- Preenchimento da requisição
+   request.action       =TipoAction;
+   request.magic        =magic;
+   request.symbol       =_Symbol;
+   request.volume       =Volume;
+   request.price        =price; 
+   request.sl           =stoploss;
+   request.tp           =takeprofit;
+   if(TipoAction==TRADE_ACTION_DEAL)
+      request.type      =ORDER_TYPE_SELL;
+   else
+      request.type      =ORDER_TYPE_SELL_LIMIT;
+   request.type_filling =ORDER_FILLING_RETURN; 
+   request.type_time    =ORDER_TIME_DAY;
+   request.comment      ="Venda CruzamentoMediaEA";
+   
+   //--- Checagem e envio de ordens
+   ResetLastError();
+   if(!OrderCheck(request, check_result))
+   {
+      PrintFormat("Erro em OrderCheck: %d", GetLastError());
+      PrintFormat("Código de Retorno: %d", check_result.retcode);
+      return;
+   }
+   
+   if(!OrderSend(request, result))
+   {
+      PrintFormat("Erro em OrderSend: %d", GetLastError());
+      PrintFormat("Código de Retorno: %d", result.retcode);
+   }
 }
 //+------------------------------------------------------------------+
 //| Fechar posição aberta                                            |
 //+------------------------------------------------------------------+
 void Fechar()
-{
+{  
+   if(OrdersTotal() != 0)
+   {
+      for(int i=OrdersTotal()-1; i>=0; i--)
+      {
+         ulong ticket = OrderGetTicket(i);
+         if(OrderGetString(ORDER_SYMBOL)==_Symbol)
+         {
+            ZeroMemory(request);
+            ZeroMemory(result);
+            ZeroMemory(check_result);
+            request.action       =TRADE_ACTION_REMOVE;
+            request.order        =ticket;
+            
+            //--- Checagem e envio de ordens
+            ResetLastError();
+            if(!OrderCheck(request, check_result))
+            {
+               PrintFormat("Erro em OrderCheck: %d", GetLastError());
+               PrintFormat("Código de Retorno: %d", check_result.retcode);
+               return;
+            }
+            
+            if(!OrderSend(request, result))
+            {
+               PrintFormat("Erro em OrderSend: %d", GetLastError());
+               PrintFormat("Código de Retorno: %d", result.retcode);
+            }
+         }
+      }
+   }
+   
    // Verificação de posição aberta
    if(!PositionSelect(_Symbol))
       return;
+      
+   // Limpar informações das estruturas
+   ZeroMemory(request);
+   ZeroMemory(result);
+   ZeroMemory(check_result);
+   
+   //--- Preenchimento da requisição
+   request.action       =TRADE_ACTION_DEAL;
+   request.magic        =magic;
+   request.symbol       =_Symbol;
+   request.volume       =Volume;
+   request.type_filling =ORDER_FILLING_RETURN; 
+   request.comment      ="Fechamento CruzamentoMediaEA";
       
    long tipo = PositionGetInteger(POSITION_TYPE); // Tipo da posição aberta
    
    // Vender em caso de posição comprada
    if(tipo == POSITION_TYPE_BUY)
-      negocio.Sell(Volume, NULL, 0, 0, 0, "Fechamento CruzamentoMediaEA");
+      //negocio.Sell(Volume, NULL, 0, 0, 0, "Fechamento CruzamentoMediaEA");
+   {
+      request.price        =simbolo.Bid(); 
+      request.type         =ORDER_TYPE_SELL;
+   }
    // Comprar em caso de posição vendida
    else
-      negocio.Buy(Volume, NULL, 0, 0, 0, "Fechamento CruzamentoMediaEA");
+      //negocio.Buy(Volume, NULL, 0, 0, 0, "Fechamento CruzamentoMediaEA");
+   {
+      request.price        =simbolo.Ask(); 
+      request.type         =ORDER_TYPE_BUY;
+   }
+   
+   //--- Checagem e envio de ordens
+   ResetLastError();
+   if(!OrderCheck(request, check_result))
+   {
+      PrintFormat("Erro em OrderCheck: %d", GetLastError());
+      PrintFormat("Código de Retorno: %d", check_result.retcode);
+      return;
+   }
+   
+   if(!OrderSend(request, result))
+   {
+      PrintFormat("Erro em OrderSend: %d", GetLastError());
+      PrintFormat("Código de Retorno: %d", result.retcode);
+   }
 }
 //+------------------------------------------------------------------+
 //| Verificar se há posição aberta                                   |
@@ -239,6 +401,19 @@ void Fechar()
 bool SemPosicao()
 {  
    return !PositionSelect(_Symbol);
+}
+//+------------------------------------------------------------------+
+//| Verificar se há ordem aberta                                     |
+//+------------------------------------------------------------------+
+bool SemOrdem()
+{  
+   for(int i=OrdersTotal()-1; i>=0; i--)
+   {
+      OrderGetTicket(i);
+      if(OrderGetString(ORDER_SYMBOL)==_Symbol)
+         return false;
+   }
+   return true;
 }
 //+------------------------------------------------------------------+
 //| Estratégia de cruzamento de médias                               |
