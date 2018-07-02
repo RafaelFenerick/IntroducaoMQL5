@@ -23,6 +23,7 @@ input int      PeriodoLongo   = 20;       // Período Média Longa
 input int      PeriodoCurto   = 10;       // Período Média Curta
 input double   SL             = 3.0;      // Stop Loss
 input double   TP             = 5.0;      // Take Profit
+input double   BE             = 3.0;      // Break Even
 input double   Volume         = 5;        // Volume
 input string   inicio         = "09:05";  // Horário de Início (entradas)
 input string   termino        = "17:00";  // Horário de Término (entradas)
@@ -128,6 +129,9 @@ void OnTick()
       // EA não está posicionado
       if(SemPosicao() && SemOrdem())
       {
+         
+         ObjectDelete(0, "BE");
+         
          // Verificar estratégia e determinar compra ou venda
          int resultado_cruzamento = Cruzamento();
          
@@ -137,6 +141,11 @@ void OnTick()
          // Estratégia indicou venda
          if(resultado_cruzamento == -1)
             Venda();
+      }
+      // EA está posicionado
+      if(!SemPosicao())
+      {
+         BreakEven();
       }
    }
    
@@ -258,7 +267,10 @@ void Compra()
    {
       PrintFormat("Erro em OrderSend: %d", GetLastError());
       PrintFormat("Código de Retorno: %d", result.retcode);
+      return;
    }
+   
+   ObjectCreate(0, "BE", OBJ_HLINE, 0, 0, price + BE);
 }
 //+------------------------------------------------------------------+
 //| Realizar venda com parâmetros especificados por input            |
@@ -308,7 +320,10 @@ void Venda()
    {
       PrintFormat("Erro em OrderSend: %d", GetLastError());
       PrintFormat("Código de Retorno: %d", result.retcode);
+      return;
    }
+   
+   ObjectCreate(0, "BE", OBJ_HLINE, 0, 0, price - BE);
 }
 //+------------------------------------------------------------------+
 //| Fechar posição aberta                                            |
@@ -400,7 +415,8 @@ void Fechar()
 //+------------------------------------------------------------------+
 bool SemPosicao()
 {  
-   return !PositionSelect(_Symbol);
+   bool resultado = !PositionSelect(_Symbol);
+   return resultado;
 }
 //+------------------------------------------------------------------+
 //| Verificar se há ordem aberta                                     |
@@ -436,5 +452,57 @@ int Cruzamento()
       return -1;
       
    return 0;
+}
+void BreakEven()
+{
+   if(!PositionSelect(_Symbol))
+      return;
+      
+   double preco_abertura = PositionGetDouble(POSITION_PRICE_OPEN);
+   double delta = simbolo.Last() - preco_abertura;
+   double sl = PositionGetDouble(POSITION_SL);
+   
+   //--- Inverter delta para posição vendida
+   if(PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_SELL)
+      delta *= -1;
+   
+   if(sl == preco_abertura)
+      return;
+   
+   if(delta >= BE)
+   {
+      //--- Estruturas de negociação
+      ZeroMemory(request);
+      ZeroMemory(result);
+      ZeroMemory(check_result);
+      //---
+      
+      //--- Preenchimento da requisição
+      request.action = TRADE_ACTION_SLTP;                               // Tipo de operação de negociação 
+      request.magic = magic;                                            // Expert Advisor -conselheiro- ID (número mágico) 
+      request.symbol = _Symbol;                                         // Símbolo de negociação 
+      request.sl = preco_abertura;                                      // Nível Stop Loss da ordem 
+      request.tp = PositionGetDouble(POSITION_TP);                      // Nível Take Profit da ordem 
+      request.position = PositionGetInteger(POSITION_TICKET);           // Bilhete da posição 
+      //---
+      //--- Checagem e envio de ordens
+      ResetLastError();
+      if(!OrderCheck(request, check_result))
+      {
+         PrintFormat("Erro em OrderCheck: %d", GetLastError());
+         PrintFormat("Código de Retorno: %d", check_result.retcode);
+         return;
+      }
+      
+      if(!OrderSend(request, result))
+      {
+         PrintFormat("Erro em OrderSend: %d", GetLastError());
+         PrintFormat("Código de Retorno: %d", result.retcode);
+         return;
+      }
+      
+      ObjectDelete(0, "BE");
+      //---
+   }
 }
 //+------------------------------------------------------------------+
