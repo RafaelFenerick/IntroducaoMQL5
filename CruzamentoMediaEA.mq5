@@ -18,18 +18,22 @@ Estratégia baseada no cruzamento de duas médias.
 #include <Trade/SymbolInfo.mqh>
 
 input ENUM_TRADE_REQUEST_ACTIONS TipoAction=TRADE_ACTION_DEAL; // Tipo de Ordem Enviada
-input double   Distancia      = 2.0;      // Distância da Ordem (ordens pendentes)
+input double   Distancia      = 0.0;      // Distância da Ordem (ordens pendentes)
 input int      PeriodoLongo   = 20;       // Período Média Longa
 input int      PeriodoCurto   = 10;       // Período Média Curta
-input double   SL             = 3.0;      // Stop Loss
-input double   TP             = 5.0;      // Take Profit
-input double   BE             = 3.0;      // Break Even
-input double   Volume         = 5;        // Volume
-input string   inicio         = "09:05";  // Horário de Início (entradas)
+input double   SL             = 0.0;      // Stop Loss
+input double   TP             = 0.0;      // Take Profit
+input double   BE             = 0.0;      // Break Even
+input double   VolumeInicial  = 1;        // Volume Inicial
+input double   VolumeMultiplicador = 1;   // Volume Multiplicador
+input double   VolumeMaximo   = 1;        // Volume Máximo
+input string   inicio         = "09:00";  // Horário de Início (entradas)
 input string   termino        = "17:00";  // Horário de Término (entradas)
 input string   fechamento     = "17:30";  // Horário de Fechamento (posições)
 
 int handlemedialonga, handlemediacurta; // Manipuladores dos dois indicadores de média móvel
+
+double volume_atual;
 
 //CTrade negocio; // Classe responsável pela execução de negócios
 CSymbolInfo simbolo; // Classe responsãvel pelos dados do ativo
@@ -102,6 +106,8 @@ int OnInit()
       return INIT_FAILED;
    }
    
+   volume_atual = VolumeInicial;
+   
    return(INIT_SUCCEEDED);
   }
 //+------------------------------------------------------------------+
@@ -129,11 +135,22 @@ void OnTick()
       // EA não está posicionado
       if(SemPosicao() && SemOrdem())
       {
-         
-         ObjectDelete(0, "BE");
-         
          // Verificar estratégia e determinar compra ou venda
          int resultado_cruzamento = Cruzamento();
+         
+         if(resultado_cruzamento != 0)
+           {
+            if(SaidaStopLoss())
+              {
+               volume_atual *= VolumeMultiplicador;
+               if(volume_atual > VolumeMaximo)
+                  volume_atual = VolumeMaximo;
+              }
+            else
+              {
+               volume_atual = VolumeInicial;
+              }
+           }
          
          // Estratégia indicou compra
          if(resultado_cruzamento == 1)
@@ -156,6 +173,14 @@ void OnTick()
       if(!SemPosicao() || !SemOrdem())
          Fechar();
    }
+   
+   // Checagem do BreakEven
+   if(!SemPosicao())
+      BreakEven();
+   
+   // Deleção da linha de BreakEven caso não estiver posicionado
+   if(SemPosicao() && SemOrdem())
+     ObjectDelete(0, "BE");
    
   }
 //+------------------------------------------------------------------+
@@ -242,7 +267,7 @@ void Compra()
    request.action       =TipoAction;
    request.magic        =magic;
    request.symbol       =_Symbol;
-   request.volume       =Volume;
+   request.volume       =volume_atual;
    request.price        =price; 
    request.sl           =stoploss;
    request.tp           =takeprofit;
@@ -270,7 +295,8 @@ void Compra()
       return;
    }
    
-   ObjectCreate(0, "BE", OBJ_HLINE, 0, 0, price + BE);
+   if(BE != 0) 
+      ObjectCreate(0, "BE", OBJ_HLINE, 0, 0, price + BE);
 }
 //+------------------------------------------------------------------+
 //| Realizar venda com parâmetros especificados por input            |
@@ -295,7 +321,7 @@ void Venda()
    request.action       =TipoAction;
    request.magic        =magic;
    request.symbol       =_Symbol;
-   request.volume       =Volume;
+   request.volume       =volume_atual;
    request.price        =price; 
    request.sl           =stoploss;
    request.tp           =takeprofit;
@@ -374,7 +400,7 @@ void Fechar()
    request.action       =TRADE_ACTION_DEAL;
    request.magic        =magic;
    request.symbol       =_Symbol;
-   request.volume       =Volume;
+   request.volume       =PositionGetDouble(POSITION_VOLUME);
    request.type_filling =ORDER_FILLING_RETURN; 
    request.comment      ="Fechamento CruzamentoMediaEA";
       
@@ -453,9 +479,15 @@ int Cruzamento()
       
    return 0;
 }
+//+------------------------------------------------------------------+
+//| Verificação de ativação do BreakEven                             |
+//+------------------------------------------------------------------+
 void BreakEven()
 {
    if(!PositionSelect(_Symbol))
+      return;
+      
+   if(BE == 0)
       return;
       
    double preco_abertura = PositionGetDouble(POSITION_PRICE_OPEN);
@@ -505,4 +537,37 @@ void BreakEven()
       //---
    }
 }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+bool SaidaStopLoss()
+  {
+   MqlDateTime inicio_struct;
+   datetime fim = TimeCurrent(inicio_struct);
+   inicio_struct.hour = 0;
+   inicio_struct.min = 0;
+   inicio_struct.sec = 0;
+   
+   if(!HistorySelect(StructToTime(inicio_struct), fim))
+      return false;
+      
+   if(HistoryDealsTotal()==0)
+      return false;
+   
+   for(int i=HistoryDealsTotal()-1; i>=0; i--)
+     {
+      ulong ticket = HistoryDealGetTicket(i);
+      
+      if(ticket > 0)
+        {
+         if(HistoryDealGetString(ticket, DEAL_SYMBOL) != _Symbol) 
+            continue;
+      
+         string comment = HistoryDealGetString(ticket, DEAL_COMMENT);
+         return StringFind(comment, "sl ")==0;
+        }
+     }
+   
+   return false;
+  }
 //+------------------------------------------------------------------+
