@@ -12,6 +12,8 @@
 #include <Trade/Trade.mqh>
 #include <Trade/SymbolInfo.mqh>
 
+input group              "Configurações gerais"
+input ulong              Magic          = 123456;      // Número mágico
 input group              "Configurações operacionais"
 input double             SL             = 0.0;         // Stop Loss
 input double             TP             = 0.0;         // Take Profit
@@ -224,18 +226,34 @@ void Venda()
 void Fechar()
   {
 // Verificação de posição aberta
-   if(!PositionSelect(_Symbol))
-      return;
-
-   negocio.PositionClose(PositionGetInteger(POSITION_TICKET));
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=Magic)
+         continue;
+      negocio.PositionClose(ticket);
+     }
   }
 //+------------------------------------------------------------------+
 //| Verificar se há posição aberta                                   |
 //+------------------------------------------------------------------+
 bool SemPosicao()
   {
-   bool resultado = !PositionSelect(_Symbol);
-   return resultado;
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=Magic)
+         continue;
+      return false;
+     }
+     
+   return true;
   }
 //+------------------------------------------------------------------+
 //| Estratégia                                                       |

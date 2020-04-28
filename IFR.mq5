@@ -12,10 +12,16 @@
 #include <Trade/Trade.mqh>
 #include <Trade/SymbolInfo.mqh>
 
+input group              "Configurações gerais"
+input ulong              Magic          = 123456;      // Número mágico
 input group              "Configurações operacionais"
 input double             SL             = 0.0;         // Stop Loss
 input double             TP             = 0.0;         // Take Profit
 input double             Volume         = 1;           // Volume
+input group              "Configurações dos ativos"
+input string             Ativo1         = "";          // Ativo 1
+input string             Ativo2         = "";          // Ativo 2
+input string             Ativo3         = "";          // Ativo 3
 input group              "Configurações do indicador"
 input int                Periodo        = 14;          // Período
 input ENUM_APPLIED_PRICE Preco          = PRICE_CLOSE; // Preço Aplicado
@@ -51,7 +57,6 @@ int OnInit()
 
 // Criação dos manipulador
    handle = iRSI(_Symbol, _Period, Periodo, Preco);
-   
 // Verificação do resultado da criação dos manipuladores
    if(handle == INVALID_HANDLE)
      {
@@ -64,8 +69,6 @@ int OnInit()
       Print("Erro na adição do indicador ao gráfico");
       return INIT_FAILED;
      }
-     
-   shortname = ChartIndicatorName(0, 1, ChartIndicatorsTotal(0, 1)-1);
 //---
 
 // Criação das structs de tempo
@@ -93,7 +96,7 @@ int OnInit()
 //| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
-  {
+  {   
 //---
    ChartIndicatorDelete(0, 1, shortname);
    
@@ -224,18 +227,34 @@ void Venda()
 void Fechar()
   {
 // Verificação de posição aberta
-   if(!PositionSelect(_Symbol))
-      return;
-
-   negocio.PositionClose(PositionGetInteger(POSITION_TICKET));
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=Magic)
+         continue;
+      negocio.PositionClose(ticket);
+     }
   }
 //+------------------------------------------------------------------+
 //| Verificar se há posição aberta                                   |
 //+------------------------------------------------------------------+
 bool SemPosicao()
   {
-   bool resultado = !PositionSelect(_Symbol);
-   return resultado;
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket))
+         continue;
+      if(PositionGetString(POSITION_SYMBOL)!=_Symbol || PositionGetInteger(POSITION_MAGIC)!=Magic)
+         continue;
+      return false;
+     }
+     
+   return true;
   }
 //+------------------------------------------------------------------+
 //| Estratégia                                                       |
@@ -244,12 +263,13 @@ int Sinal()
   {
    double ifr[];
    ArraySetAsSeries(ifr, true);
+   
    CopyBuffer(handle, 0, 1, 2, ifr);
    
-   if(ifr[1] <= LimiteSup && ifr[0] > LimiteSup)
-      return -1;
    if(ifr[1] >= LimiteInf && ifr[0] < LimiteInf)
       return 1;
+   if(ifr[1] < LimiteSup && ifr[0] > LimiteSup)
+      return -1;
    
    return 0;
   }
