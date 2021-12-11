@@ -50,6 +50,9 @@ int OnInit()
       printf("Ativo Inválido!");
       return INIT_FAILED;
      }
+     
+// Definição de número mágico
+   negocio.SetExpertMagicNumber(Magic);
 
 // Criação dos manipulador
    handle = iMACD(_Symbol, _Period, EMARapida, EMALenta, MACD, Preco);

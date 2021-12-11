@@ -50,6 +50,9 @@ int OnInit()
       printf("Ativo Inválido!");
       return INIT_FAILED;
      }
+     
+// Definição de número mágico
+   negocio.SetExpertMagicNumber(Magic);
 
 // Criação dos manipulador
    handle = iBands(_Symbol, _Period, Periodo, Deslocamento, Desvio, Preco);

@@ -53,6 +53,9 @@ int OnInit()
       printf("Ativo Inválido!");
       return INIT_FAILED;
      }
+     
+// Definição de número mágico
+   negocio.SetExpertMagicNumber(Magic);
 
 // Criação dos manipulador
    handle1 = iRSI(Ativo1, _Period, Periodo, Preco);
