@@ -13,11 +13,28 @@
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+enum ENUM_SINAL  
+  {
+   SINAL_NENHUM=0, // Desativado
+   SINAL_FITRO,   // Filtro
+   SINAL_ENTRADA  // Entrada
+  };
+  
+enum ENUM_ACAO
+  {
+   ACAO_NENHUM=0,
+   ACAO_COMPRA,
+   ACAO_VENDA,
+   ACAO_BLOCK
+  };  
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 class CIndicadores
   {
 protected:
    
-   bool                 m_bb_ativo;
+   ENUM_SINAL           m_bb_ativo;
    int                  m_bb_handle;
    double               m_bb_sup_buffer[];
    double               m_bb_inf_buffer[];
@@ -26,7 +43,7 @@ protected:
    int                  m_bb_deslocamento;
    ENUM_APPLIED_PRICE   m_bb_preco;
    
-   bool                 m_ifr_ativo;
+   ENUM_SINAL           m_ifr_ativo;
    int                  m_ifr_handle;
    double               m_ifr_buffer[];
    int                  m_ifr_periodo;
@@ -38,8 +55,8 @@ public:
    void CIndicadores();
    void ~CIndicadores();
    
-   void  SetBB(bool value)  {m_bb_ativo=value; }
-   void  SetIFR(bool value) {m_ifr_ativo=value;}
+   void  SetBB(ENUM_SINAL value)  {m_bb_ativo=value; }
+   void  SetIFR(ENUM_SINAL value) {m_ifr_ativo=value;}
    void  BB(int periodo, double desvio, int deslocamento, ENUM_APPLIED_PRICE preco);
    void  IFR(int periodo, ENUM_APPLIED_PRICE preco, double lim_inf, double lim_sup);
    
@@ -52,8 +69,8 @@ public:
 //+------------------------------------------------------------------+
 void CIndicadores::CIndicadores(void)
   {
-   m_bb_ativo = false;
-   m_ifr_ativo = false;
+   m_bb_ativo = SINAL_NENHUM;
+   m_ifr_ativo = SINAL_NENHUM;
   }
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -106,30 +123,56 @@ void CIndicadores::Iniciar(void)
 //+------------------------------------------------------------------+
 int CIndicadores::Sinal(void)
   {
-   if(m_bb_ativo)
+   ENUM_ACAO acao = ACAO_NENHUM;
+  
+   if(m_bb_ativo!=SINAL_NENHUM)
      {
-      if(CopyBuffer(m_bb_handle, 1, 0, 1, m_bb_sup_buffer)<=0)
+      if(CopyBuffer(m_bb_handle, 1, 0, 2, m_bb_sup_buffer)<=0)
          return 0;
-      if(CopyBuffer(m_bb_handle, 2, 0, 1, m_bb_inf_buffer)<=0)
+      if(CopyBuffer(m_bb_handle, 2, 0, 2, m_bb_inf_buffer)<=0)
          return 0;
          
-      double preco = iClose(_Symbol, _Period, 0);
-      if(preco < m_bb_inf_buffer[0])
-         return 1;
-      if(preco > m_bb_sup_buffer[0])
-         return -1;
+      double preco0 = iClose(_Symbol, _Period, 0);
+      double preco1 = iClose(_Symbol, _Period, 1);
+      int res = 0;
+      if(preco0 < m_bb_inf_buffer[0] && (m_bb_ativo!=SINAL_ENTRADA || preco1 >= m_bb_inf_buffer[1]))
+         res = 1;
+      if(preco0 > m_bb_sup_buffer[0] && (m_bb_ativo!=SINAL_ENTRADA || preco1 <= m_bb_sup_buffer[1]))
+         res = -1;
+         
+      if((acao==ACAO_COMPRA && res<=0) || (acao==ACAO_VENDA && res>=0) || (acao==ACAO_NENHUM && res==0))
+         acao = ACAO_BLOCK;
+         
+      if(acao!=ACAO_BLOCK && m_bb_ativo==SINAL_ENTRADA)
+        {
+         if(res==1) acao = ACAO_COMPRA;
+         if(res==-1) acao = ACAO_VENDA;
+        }
      }
      
-   if(m_ifr_ativo)
+   if(m_ifr_ativo!=SINAL_NENHUM)
      {
-      if(CopyBuffer(m_ifr_handle, 0, 0, 1, m_ifr_buffer)<=0)
+      if(CopyBuffer(m_ifr_handle, 0, 0, 2, m_ifr_buffer)<=0)
          return 0;
          
-      if(m_ifr_buffer[0] > m_ifr_lim_sup)
-         return -1;
-      if(m_ifr_buffer[0] < m_ifr_lim_inf)
-         return 1;
+      int res = 0;
+      if(m_ifr_buffer[0] > m_ifr_lim_sup && (m_ifr_ativo!=SINAL_ENTRADA || m_ifr_buffer[1] <= m_ifr_lim_sup))
+         res = -1;
+      if(m_ifr_buffer[0] < m_ifr_lim_inf && (m_ifr_ativo!=SINAL_ENTRADA || m_ifr_buffer[1] >= m_ifr_lim_inf))
+         res = 1;
+         
+      if((acao==ACAO_COMPRA && res<=0) || (acao==ACAO_VENDA && res>=0) || (acao==ACAO_NENHUM && res==0))
+         acao = ACAO_BLOCK;
+         
+      if(acao!=ACAO_BLOCK && m_ifr_ativo==SINAL_ENTRADA)
+        {
+         if(res==1) acao = ACAO_COMPRA;
+         if(res==-1) acao = ACAO_VENDA;
+        }
      }  
+     
+   if(acao==ACAO_COMPRA) return 1;
+   if(acao==ACAO_VENDA) return -1;  
      
    return 0;
   }

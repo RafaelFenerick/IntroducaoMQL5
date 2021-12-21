@@ -48,7 +48,7 @@ bool CHorarios::HorarioEntrada(void)
    datetime inicio = StringToTime(TimeToString(atual, TIME_DATE) + " " + m_inicio);
    datetime termino = StringToTime(TimeToString(atual, TIME_DATE) + " " + m_termino);
    
-   return atual >= inicio && atual < termino;
+   return (atual >= inicio || m_inicio=="") && (atual < termino || m_termino=="");
   }
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -61,6 +61,6 @@ bool CHorarios::HorarioFechamento(void)
    datetime atual = TimeCurrent();
    datetime encerramento = StringToTime(TimeToString(atual, TIME_DATE) + " " + m_encerramento);
    
-   return atual >= encerramento;
+   return atual >= encerramento && m_encerramento!="";
   }
 //+------------------------------------------------------------------+

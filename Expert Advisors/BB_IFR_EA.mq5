@@ -1,19 +1,21 @@
 //+------------------------------------------------------------------+
-//|                                           Bandas de Bolinger.mq5 |
-//|                                                  Rafael Fenerick |
-//|                           https://www.youtube.com/RafaelFenerick |
-//|                                    rafaelfenerick.mql5@gmail.com |
+//|                                                    BB_IFR_EA.mq5 |
+//|                                          Copyright 2020, CMTrade |
+//|                                                 fenerickmql5.com |
 //+------------------------------------------------------------------+
-#property copyright "Rafael Fenerick"
-#property link      "rafaelfenerick.mql5@gmail.com"
+#property copyright "CMTrade Tecnologia LTDA"
+#property link      "https://www.cmtrade.com.br"
 #property version   "1.00"
-
-// Inclusão de bibliotecas utilizadas
+//+------------------------------------------------------------------+
+//|Inclusão de bibliotecas utilizadas                                |
+//+------------------------------------------------------------------+
 #include <Trade/Trade.mqh>
 #include <Trade/SymbolInfo.mqh>
 #include <RFYouTube/Horarios.mqh>
 #include <RFYouTube/Indicadores.mqh>
-
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 input group              "Configurações gerais"
 input ulong              Magic          = 123456;      // Número mágico
 input group              "Configurações operacionais"
@@ -21,13 +23,13 @@ input double             SL             = 0.0;         // Stop Loss
 input double             TP             = 0.0;         // Take Profit
 input double             Volume         = 1;           // Volume
 input group              "Configurações - Bandas de Bollinger"
-input bool               BB_Ativo       = false;       // Ativar
+input ENUM_SINAL         BB_Ativo       = SINAL_NENHUM;// Ativar
 input int                BB_Periodo     = 20;          // Período
 input double             BB_Desvio      = 2;           // Desvio
 input int                BB_Deslocamento= 0;           // Deslocar
 input ENUM_APPLIED_PRICE BB_Preco       = PRICE_CLOSE; // Preço Aplicado
 input group              "Configurações - IFR"
-input bool               IFR_Ativo      = false;       // Ativar
+input ENUM_SINAL         IFR_Ativo      = SINAL_NENHUM;// Ativar
 input int                IFR_Periodo    = 14;          // Período
 input ENUM_APPLIED_PRICE IFR_Preco      = PRICE_CLOSE; // Preço Aplicado
 input double             IFR_LimiteSup  = 70;          // Limite Superior
@@ -38,12 +40,13 @@ input string             H_termino1     = "12:00";     // Horário de Término 1
 input string             H_inicio2      = "13:00";     // Horário de Início 2 (entradas)
 input string             H_termino2     = "17:00";     // Horário de Término 2 (entradas)
 input string             H_fechamento2  = "17:30";     // Horário de Fechamento (posições)
-
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 CTrade      negocio; // Classe responsável pela execução de negócios
 CSymbolInfo simbolo; // Classe responsãvel pelos dados do ativo
 CHorarios   *horario1, *horario2;
 CIndicadores *indicadores;
-
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
